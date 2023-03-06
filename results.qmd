@@ -1,0 +1,171 @@
+---
+title: "Untitled"
+format: docx
+editor: visual
+---
+
+
+```{r, warning=FALSE, message=FALSE}
+pacman::p_load(tidyverse, here, doSPSS, skimr, psych, ez)
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+raw_data <- read_csv(here('Data\\data_for_perp.csv'))
+```
+
+```{r, warning=FALSE, message=FALSE}
+Data <- raw_data %>% 
+  mutate(Duration = doSPSS::sdOutliers(Duration)) %>% 
+  drop_na(Duration) %>% 
+  filter(Attention == 'Maybe' 
+           & Honesty == 'Yes, I put in a reasonable effort' 
+           & Disturbances == 'No' 
+           & Alone == 'Alone' 
+           & Consecutively == 'Yes')
+
+Data <- Data %>% 
+  mutate(val_Expert_Knowledge = rowMeans(cbind(valExpert, vlaKnowledge))) %>% 
+  mutate(expert_first = rowMeans(cbind(Competent_1
+                                       , Intelligent_1
+                                       , Educated_1
+                                       , Professional_1
+                                       , Experienced_1
+                                       , Qualified_1)),
+         integrity_first = rowMeans(cbind(Helpful_1
+                                          , Sincere_1
+                                          , Honest_1
+                                          , Just_1)),
+         benevolance_first = rowMeans(cbind(Unselfish_1
+                                            , Fair_1
+                                            , Moral_1
+                                            , Ethical_1
+                                            , Responsible_1
+                                            , Considerate_1)),
+         expert_second = rowMeans(cbind(Competent_2
+                                        , Intelligent_2
+                                        , Educated_2
+                                        , Professional_2
+                                        , Experienced_2
+                                        , Qualified_2)),
+         integrity_second = rowMeans(cbind(Helpful_2
+                                            , Sincere_2
+                                            , Honest_2
+                                            , Just_2)),
+         benevolance_second = rowMeans(cbind(Unselfish_2
+                                            , Fair_2
+                                            , Moral_2
+                                            , Ethical_2
+                                            , Responsible_2
+                                            , Considerate_2))) %>% 
+  mutate(Dr_expertise   = if_else(Dr_position == 'up', expert_first, expert_second),
+         Dr_integrity   = if_else(Dr_position == 'up', integrity_first, integrity_second),
+         Dr_benevolance = if_else(Dr_position == 'up', benevolance_first, benevolance_second),
+         Lay_expertise   = if_else(Dr_position == 'down', expert_first, expert_second),
+         Lay_integrity   = if_else(Dr_position == 'down', integrity_first, integrity_second),
+         Lay_benevolance = if_else(Dr_position == 'down', benevolance_first, benevolance_second)) %>% 
+  mutate(gap_expertise = Dr_expertise - Lay_expertise,
+         gap_integrity = Dr_integrity - Lay_integrity,
+         gap_benevolance = Dr_benevolance - Lay_benevolance) %>% 
+  mutate(select_doctor = if_else(Adherence %in% c('Dr. Richard Green', 'Dr. James Wood'), 'select_doctor',
+                                 if_else(Adherence == 'Neither', Adherence, 'select_layperson')),
+         answer_position = paste0(Dr_position, Dr_answer))
+
+
+
+data_expertise <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_expertise
+         , Dr_expertise
+         , Lay_expertise
+         ) %>% 
+  tidyr::gather(source_identity, measurement, Dr_expertise:Lay_expertise, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement))
+
+data_integrity <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_integrity
+         , Dr_integrity
+         , Lay_integrity
+         ) %>% 
+  tidyr::gather(source_identity, measurement, Dr_integrity:Lay_integrity, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement))
+
+
+data_benevolance <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_benevolance
+         , Dr_benevolance
+         , Lay_benevolance
+         , gap_benevolance) %>% 
+  tidyr::gather(source_identity, measurement, Dr_benevolance:Lay_benevolance, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement))
+
+```
+
+# Source expertise * Source answer METI factors:
+## Expertise
+```{r}
+t <- twoWay(data_expertise$clean_measurement, data_expertise$source_identity, data_expertise$Dr_answer)
+t$Descriptive_Statistics
+t$Figure 
+
+data_expertise %>% 
+  group_by(source_identity, Dr_answer, Dr_position) %>% 
+  skim(clean_measurement)
+
+
+```
+## Integrity
+```{r}
+
+t <- twoWay(data_integrity$clean_measurement, data_integrity$source_identity, data_integrity$Dr_answer)
+t$Descriptive_Statistics
+t$Figure
+```
+
+## Benevolance
+
+```{r}
+t <- twoWay(data_benevolance$clean_measurement, data_benevolance$source_identity, data_benevolance$Dr_answer)
+t$Descriptive_Statistics
+t$Figure
+
+```
+
+# Adhearece to source (rows) by the source's answer (columns)
+```{r}
+CT(Data$select_doctor, Data$Dr_answer)
+
+```
+

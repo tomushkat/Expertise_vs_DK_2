@@ -1,0 +1,385 @@
+---
+title: "Cleaning data"
+author: "Tom Mushkat"
+format: html
+editor: visual
+---
+
+```{r, warning=FALSE, message=FALSE}
+pacman::p_load(tidyverse, here, doSPSS, skimr, psych)
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+raw_data <- read_csv(here('Data\\data_for_perp.csv'))
+demographic_data <- read_csv(here('Data\\demographic data.csv')) %>% 
+  mutate(demographic_age = as.numeric(Age),
+         demographic_gender = Sex) %>% 
+  select(Q1, demographic_age, demographic_gender)
+
+raw_data <- raw_data %>% 
+  left_join(demographic_data, by = join_by(Q1))
+
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+Data <- raw_data %>% 
+  mutate(Duration = doSPSS::sdOutliers(Duration)) %>% 
+  drop_na(Duration) %>% 
+  filter(Attention == 'Maybe' 
+           & Honesty == 'Yes, I put in a reasonable effort' 
+           & Disturbances == 'No' 
+           & Alone == 'Alone' 
+           & Consecutively == 'Yes')
+
+Data <- Data %>% 
+  mutate(val_Expert_Knowledge = rowMeans(cbind(valExpert, vlaKnowledge))) %>% 
+  mutate(expert_first = rowMeans(cbind(Competent_1
+                                       , Intelligent_1
+                                       , Educated_1
+                                       , Professional_1
+                                       , Experienced_1
+                                       , Qualified_1)),
+         integrity_first = rowMeans(cbind(Helpful_1
+                                          , Sincere_1
+                                          , Honest_1
+                                          , Just_1)),
+         benevolance_first = rowMeans(cbind(Unselfish_1
+                                            , Fair_1
+                                            , Moral_1
+                                            , Ethical_1
+                                            , Responsible_1
+                                            , Considerate_1)),
+         expert_second = rowMeans(cbind(Competent_2
+                                        , Intelligent_2
+                                        , Educated_2
+                                        , Professional_2
+                                        , Experienced_2
+                                        , Qualified_2)),
+         integrity_second = rowMeans(cbind(Helpful_2
+                                            , Sincere_2
+                                            , Honest_2
+                                            , Just_2)),
+         benevolance_second = rowMeans(cbind(Unselfish_2
+                                            , Fair_2
+                                            , Moral_2
+                                            , Ethical_2
+                                            , Responsible_2
+                                            , Considerate_2))) %>% 
+  mutate(Dr_expertise   = if_else(Dr_position == 'up', expert_first, expert_second),
+         Dr_integrity   = if_else(Dr_position == 'up', integrity_first, integrity_second),
+         Dr_benevolance = if_else(Dr_position == 'up', benevolance_first, benevolance_second),
+         Lay_expertise   = if_else(Dr_position == 'down', expert_first, expert_second),
+         Lay_integrity   = if_else(Dr_position == 'down', integrity_first, integrity_second),
+         Lay_benevolance = if_else(Dr_position == 'down', benevolance_first, benevolance_second)) %>% 
+  mutate(gap_expertise = Dr_expertise - Lay_expertise,
+         gap_integrity = Dr_integrity - Lay_integrity,
+         gap_benevolance = Dr_benevolance - Lay_benevolance) %>% 
+  mutate(select_doctor = if_else(Adherence %in% c('Dr. Richard Green', 'Dr. James Wood'), 'select_doctor',
+                                 if_else(Adherence == 'Neither', Adherence, 'select_layperson')),
+         answer_position = paste0(Dr_position, Dr_answer))
+
+
+cor.test(Data$valExpert, Data$vlaKnowledge, method = 'spearman')
+
+alp_exp_up         <- psych::alpha(cbind(Data$Competent_1, Data$Intelligent_1, Data$Educated_1, Data$Professional_1, Data$Experienced_1, Data$Qualified_1))
+alp_integrity_up   <- psych::alpha(cbind(Data$Helpful_1, Data$Sincere_1, Data$Honest_1, Data$Just_1))
+alp_benevolance_up <- psych::alpha(cbind(Data$Unselfish_1, Data$Fair_1, Data$Moral_1, Data$Ethical_1, Data$Responsible_1, Data$Considerate_1))
+
+alp_exp_down         <- psych::alpha(cbind(Data$Competent_2, Data$Intelligent_2, Data$Educated_2, Data$Professional_2, Data$Experienced_2, Data$Qualified_2))
+alp_integrity_down   <- psych::alpha(cbind(Data$Helpful_2, Data$Sincere_2, Data$Honest_2, Data$Just_2))
+alp_benevolance_down <- psych::alpha(cbind(Data$Unselfish_2, Data$Fair_2, Data$Moral_2, Data$Ethical_2, Data$Responsible_2, Data$Considerate_2))
+```
+
+
+
+
+
+```{r, warning=FALSE, message=FALSE}
+
+
+data_expertise <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_expertise
+         , Dr_expertise
+         , Lay_expertise
+         ) %>% 
+  tidyr::gather(source_identity, measurement, Dr_expertise:Lay_expertise, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement)) %>% 
+  drop_na() %>% 
+  group_by(Q1) %>% 
+  mutate(ID = length(Q1)) %>% 
+  ungroup() %>% 
+  filter(ID == 2)
+ 
+
+data_integrity <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_integrity
+         , Dr_integrity
+         , Lay_integrity
+         ) %>% 
+  tidyr::gather(source_identity, measurement, Dr_integrity:Lay_integrity, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement)) %>% 
+  drop_na() %>% 
+  group_by(Q1) %>% 
+  mutate(ID = length(Q1)) %>% 
+  ungroup() %>% 
+  filter(ID == 2)
+
+
+skim(data_expertise$clean_measurement)
+skim(data_integrity$clean_measurement)
+
+
+data_benevolance <- Data %>% 
+  select(StartDate
+         , Duration
+         , Q1
+         , Age
+         , Gender
+         , realHappen
+         , val_Expert_Knowledge
+         , full_condition
+         , Dr_name
+         , Dr_answer
+         , Dr_position
+         , gap_benevolance
+         , Dr_benevolance
+         , Lay_benevolance) %>% 
+  tidyr::gather(source_identity, measurement, Dr_benevolance:Lay_benevolance, factor_key = FALSE) %>% 
+  mutate(clean_measurement = sdOutliers(measurement)) %>% 
+  drop_na() %>% 
+  group_by(Q1) %>% 
+  mutate(ID = length(Q1)) %>% 
+  ungroup() %>% 
+  filter(ID == 2)
+
+
+
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+alp_exp_up$total$raw_alpha %>% round(2)
+alp_exp_down$total$raw_alpha %>% round(2)
+
+
+MODEL <- twoWay(data_expertise$clean_measurement, data_expertise$Dr_answer, data_expertise$source_identity)
+MODEL$Figure
+MODEL$Descriptive_Statistics
+ez::ezANOVA(data = data_expertise, dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+indttest(data_expertise$gap_expertise, data_expertise$Dr_answer)
+
+
+t <- data_expertise %>% 
+  filter(source_identity == 'Dr_expertise') 
+indttest(t$clean_measurement, t$Dr_answer) 
+
+t_1 <- data_expertise %>% 
+  filter(source_identity == 'Lay_expertise') 
+indttest(t_1$clean_measurement, t_1$Dr_answer)  
+
+t <- data_integrity %>% 
+  filter(Dr_answer == 'DK') 
+indttest(t$clean_measurement, t$source_identity) 
+
+t_1 <- data_benevolance %>% 
+  filter(Dr_answer != 'DK') 
+indttest(t_1$clean_measurement, t_1$source_identity)  
+
+```
+
+
+
+```{r, warning=FALSE, message=FALSE}
+alp_exp_up$total$raw_alpha %>% round(2)
+alp_exp_down$total$raw_alpha %>% round(2)
+
+
+MODEL_2 <- twoWay(data_expertise$clean_measurement[data_expertise$Dr_position == 'up'], data_expertise$Dr_answer[data_expertise$Dr_position == 'up'], data_expertise$source_identity[data_expertise$Dr_position == 'up'])
+MODEL_2$Figure
+MODEL_2$Descriptive_Statistics
+ez::ezANOVA(data = data_expertise[data_expertise$Dr_position == 'up', ], dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+indttest(data_expertise$gap_expertise[data_expertise$Dr_position == 'up'], data_expertise$Dr_answer[data_expertise$Dr_position == 'up'])
+
+
+t_2 <- data_expertise[data_expertise$Dr_position == 'up', ] %>% 
+  filter(source_identity == 'Dr_expertise') 
+indttest(t_2$clean_measurement, t_2$Dr_answer) 
+
+t_1_2 <- data_expertise[data_expertise$Dr_position == 'up', ] %>% 
+  filter(source_identity == 'Lay_expertise') 
+indttest(t_1_2$clean_measurement, t_1_2$Dr_answer)  
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+alp_exp_up$total$raw_alpha %>% round(2)
+alp_exp_down$total$raw_alpha %>% round(2)
+
+
+MODEL_3 <- twoWay(data_expertise$clean_measurement[data_expertise$Dr_position != 'up'], data_expertise$Dr_answer[data_expertise$Dr_position != 'up'], data_expertise$source_identity[data_expertise$Dr_position != 'up'])
+MODEL_3$Figure
+MODEL_3$Descriptive_Statistics
+ez::ezANOVA(data = data_expertise[data_expertise$Dr_position != 'up', ], dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+indttest(data_expertise$gap_expertise[data_expertise$Dr_position != 'up'], data_expertise$Dr_answer[data_expertise$Dr_position != 'up'])
+
+
+t_3 <- data_expertise[data_expertise$Dr_position != 'up', ] %>% 
+  filter(source_identity == 'Dr_expertise') 
+indttest(t_3$clean_measurement, t_3$Dr_answer) 
+
+t_1_3 <- data_expertise[data_expertise$Dr_position != 'up', ] %>% 
+  filter(source_identity == 'Lay_expertise') 
+indttest(t_1_3$clean_measurement, t_1_3$Dr_answer)  
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+alp_exp_up$total$raw_alpha %>% round(2)
+alp_exp_down$total$raw_alpha %>% round(2)
+
+
+MODEL <- twoWay(data_expertise$clean_measurement, data_expertise$Dr_answer, data_expertise$source_identity)
+MODEL$Figure
+MODEL$Descriptive_Statistics
+ez::ezANOVA(data = data_expertise, dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+indttest(data_expertise$gap_expertise, data_expertise$Dr_answer)
+
+
+t <- data_expertise %>% 
+  filter(source_identity == 'Dr_expertise') 
+indttest(t$clean_measurement, t$Dr_answer) 
+
+t_1 <- data_expertise %>% 
+  filter(source_identity == 'Lay_expertise') 
+indttest(t_1$clean_measurement, t_1$Dr_answer)  
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, warning=FALSE, message=FALSE}
+alp_integrity_up$total$raw_alpha %>% round(2)
+alp_integrity_down$total$raw_alpha %>% round(2)
+
+MODEL <- twoWay(data_integrity$clean_measurement, data_integrity$Dr_answer, data_integrity$source_identity)
+MODEL$Figure
+MODEL$Descriptive_Statistics
+ez::ezANOVA(data = data_integrity, dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+indttest(data_integrity$gap_integrity, data_integrity$Dr_answer)
+
+t <- data_integrity %>% 
+  filter(source_identity == 'Dr_integrity') 
+indttest(t$clean_measurement, t$Dr_answer) 
+t_1 <- data_integrity %>% 
+  filter(source_identity == 'Lay_integrity') 
+indttest(t_1$clean_measurement, t_1$Dr_answer)
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+alp_benevolance_up$total$raw_alpha %>% round(2)
+alp_benevolance_down$total$raw_alpha %>% round(2)
+
+
+MODEL <- twoWay(data_benevolance$clean_measurement, data_benevolance$Dr_answer, data_benevolance$source_identity)
+MODEL$Figure
+MODEL$Descriptive_Statistics
+ez::ezANOVA(data = data_benevolance, dv = clean_measurement, wid = Q1, within = source_identity, between = c(Dr_answer), type = 3, return_aov = TRUE, detailed = TRUE)
+
+
+indttest(data_benevolance$gap_benevolance, data_benevolance$Dr_answer)
+
+t <- data_benevolance %>% 
+  filter(source_identity == 'Dr_benevolance') 
+indttest(t$clean_measurement, t$Dr_answer) 
+t_1 <- data_benevolance %>% 
+  filter(source_identity == 'Lay_benevolance') 
+indttest(t_1$clean_measurement, t_1$Dr_answer)
+```
+
+# Adhearece to source (rows) by the source's answer (columns)
+```{r}
+CT(Data$select_doctor, Data$Dr_answer)
+```
+
+
+# Controls
+
+```{r}
+oneWayAnova(Data$Age, Data$full_condition, Parametric = FALSE)
+
+CT(Data$Gender, Data$full_condition)
+
+
+CT(Data$select_doctor, Data$answer_position)
+CT(Data$select_doctor, Data$Dr_answer)
+CT(Data$select_doctor[Data$Gender != 'Prefer not to say'], Data$Gender[Data$Gender != 'Prefer not to say'])
+
+oneWayAnova(Data$Age, Data$select_doctor, Parametric = FALSE)
+
+
+pairedT(DV = data_expertise$val_Expert_Knowledge
+        , IDV = data_expertise$source_identity
+        , Within = data_expertise$Q1)
+
+
+Data %>% 
+  filter(Q1 == '5afb313ab1e92800016421b6')
+
+data_expertise %>% 
+  filter(Q1 == '5afb313ab1e92800016421b6')
+
+```
