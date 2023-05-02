@@ -16,13 +16,13 @@ raw_data <- read_csv(here('Data\\data_for_perp.csv'))
 
 ```{r, warning=FALSE, message=FALSE}
 Data <- raw_data %>% 
-  mutate(Duration = doSPSS::sdOutliers(Duration)) %>% 
-  drop_na(Duration) %>% 
   filter(Attention == 'Maybe' 
            & Honesty == 'Yes, I put in a reasonable effort' 
            & Disturbances == 'No' 
            & Alone == 'Alone' 
-           & Consecutively == 'Yes')
+           & Consecutively == 'Yes') %>% 
+    mutate(Duration = doSPSS::sdOutliers(Duration)) %>% 
+  drop_na(Duration) 
 
 Data <- Data %>% 
   mutate(val_Expert_Knowledge = rowMeans(cbind(valExpert, vlaKnowledge))) %>% 
